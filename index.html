@@ -1,114 +1,84 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    </head>
-<body>
-    <div class="auth-container" id="login-box">
-        <div class="captcha-header">
-            <h3>先输入密码</h3>
-            <p>再选择所有包含</p>
-            <strong>黄前久美子</strong>
-            <p>的图片</p>
-        </div>
-        <div class="password-section">
-            <input type="password" id="password-input" class="password-input" placeholder="输入访问密码（随时更新）">
-        </div>
-        <div class="grid-container" id="image-grid"></div>
-        <div class="footer">
-            <span class="status-text" id="status-msg">验证失败，请重试</span>
-            <button class="verify-btn" onclick="verifyAndUnlock()">验证</button>
-        </div>
-        <div class="extra-link-wrapper">
-            <a href="./directions.html" class="extra-link-btn">代理策略可视化</a>
-        </div>
-    </div>
-
-    <div id="dashboard">
-        <div class="dash-header">
-            <span>链接管理</span>
-            <button onclick="location.reload()" style="border:none;background:none;cursor:pointer;">退出 Exit</button>
-        </div>
-        <div class="dash-body">
-            <div class="sidebar" id="sidebar"></div>
-            <div class="content">
-                <h3 id="sub-title">选择版本</h3>
-                <div class="code-box" id="sub-url">...</div>
-                <button class="copy-btn" onclick="copyText()">复制链接</button>
-            </div>
-        </div>
-    </div>
-
-<script>
-    // ⚠️ 在这里填入你的 Worker API 地址
-    const WORKER_URL = "https://你的worker域名.workers.dev"; 
-
-    // 你的图片池数组 IMAGE_POOL 和 IMG_BASE_PATH 保持不变，粘贴回这里
+// ⚠️ 填入你刚才在 Cloudflare 部署的无密码版 Worker 地址
+    const WORKER_URL = "https://clash-sub.ardeliaaggas08.workers.dev"; 
     
-    let currentSelection = new Set(); 
-    let currentRenderedImages = [];   
-    
-    window.onload = function() { initCaptcha(); };
-
-    function isCorrectImage(filename) {
-        const namePart = filename.substring(0, filename.lastIndexOf('.'));
-        if (namePart.length < 2) return false;
-        return namePart.charAt(namePart.length - 2) === '0';
-    }
-
-    function initCaptcha() {
-        // ... (你原本洗牌和渲染图片的逻辑原封不动粘贴回这里) ...
-    }
-    
-    function shuffleArray(array) { /* 原封不动 */ }
-    function toggleSelect(element, index) { /* 原封不动 */ }
+    // 🔴 每次用 admin.html 生成的新密文，替换到这里！
+    const ENCRYPTED_DATA = "U2FsdGVkX1...这里放你用本地 admin 生成的超长密文...";
 
     async function verifyAndUnlock() {
         const passwordField = document.getElementById('password-input');
         const password = passwordField.value;
         const msg = document.getElementById('status-msg');
         
-        if (!password) { alert("❌ 请输入密码！"); return; }
+        if (!password) {
+            alert("❌ 请输入口令！");
+            return;
+        }
 
+        // 1. 本地图片验证逻辑
         let isCaptchaValid = true;
-        currentSelection.forEach(index => { if (!isCorrectImage(currentRenderedImages[index])) isCaptchaValid = false; });
-        currentRenderedImages.forEach((img, index) => { if (isCorrectImage(img) && !currentSelection.has(index)) isCaptchaValid = false; });
+        currentSelection.forEach(index => {
+            if (!isCorrectImage(currentRenderedImages[index])) isCaptchaValid = false;
+        });
+        currentRenderedImages.forEach((img, index) => {
+            if (isCorrectImage(img) && !currentSelection.has(index)) isCaptchaValid = false;
+        });
 
         if (!isCaptchaValid) {
-            alert("❌ 图片验证失败！\n请仔细辨认黄前部长。");
-            msg.textContent = "验证失败";
+            alert("❌ 吹奏部入部测试失败！\n请仔细辨认黄前部长。");
+            msg.textContent = "图片验证失败";
             msg.style.visibility = 'visible';
             setTimeout(initCaptcha, 1000); 
             return;
         }
 
+        // 2. 核心：完全在本地浏览器进行 AES 解密！
+        let data;
         try {
-            const res = await fetch(WORKER_URL + '/api/verify', {
+            const bytes = CryptoJS.AES.decrypt(ENCRYPTED_DATA.trim(), password);
+            const originalText = bytes.toString(CryptoJS.enc.Utf8);
+            
+            if (!originalText) throw new Error("解密结果为空");
+            
+            data = JSON.parse(originalText); 
+            console.log("本地解密成功！");
+        } catch (e) {
+            // 只要密码错一个字，或者图片验证码乱选导致密码不对，都会在这里被拦截
+            alert("❌ 口令错误，解密失败！");
+            msg.textContent = "口令错误";
+            msg.style.visibility = 'visible';
+            passwordField.value = ''; 
+            initCaptcha(); 
+            return;
+        }
+
+        // 3. 解密成功后，把解密出来的真实 URL 发给 Cloudflare 制造替身
+        try {
+            // 提取出你配置里的真实 URL
+            const realGistUrl = data[0].url; 
+
+            const res = await fetch(WORKER_URL + '/api/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: password })
+                body: JSON.stringify({ target_url: realGistUrl })
             });
 
-            const data = await res.json();
+            const apiData = await res.json();
 
-            if (data.success) {
-                alert("✅ 验证成功！ \n【必读】 \n请复制生成的一次性链接导入代理软件，该链接下载一次后即刻销毁。");
-                const mockData = [{ title: "阅后即焚专属节点", url: data.link }];
+            if (apiData.link) {
+                alert("✅ 验证通过且替身链接生成成功！\n请复制该一次性链接导入 Clash。");
+                
+                // 将真实的 URL 替换为 Cloudflare 给的一次性替身链接，展示给用户
+                const mockData = [{
+                    title: "阅后即焚专属节点 (单次有效)", 
+                    url: apiData.link
+                }];
                 showDashboard(mockData);
-            } else {
-                alert("❌ " + data.error);
-                msg.textContent = "口令错误";
-                msg.style.visibility = 'visible';
-                passwordField.value = '';
-                initCaptcha();
             }
+            
         } catch (e) {
-            alert("❌ 网络请求失败！请检查 Worker 接口是否被墙。");
+            console.error("请求失败:", e); 
+            alert("❌ 生成阅后即焚链接失败！网络请求被拦截，请检查代理设置。");
+            msg.textContent = "网络异常";
+            msg.style.visibility = 'visible';
         }
     }
-
-    function showDashboard(data) { /* 原封不动 */ }
-    function loadContent(item, elem) { /* 原封不动 */ }
-    function copyText() { /* 原封不动 */ }
-</script>
-</body>
-</html>
