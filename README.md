@@ -1,2 +1,2 @@
 Admin site:
-https://yoshikawayuko.github.io/Encrypted-Data-Generator/
+https://admin.cocoachino.dpdns.org
