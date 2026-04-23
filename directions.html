@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代理策略可视化</title>
+    <style>
+        :root {
+            --bg-color: #f7fbfa;
+            --text-color: #4a5568;
+            --macaron-blue: #A0C4FF;
+            --macaron-pink: #FFC6FF;
+            --macaron-green: #CAFFBF;
+            --macaron-yellow: #FDFFB6;
+            --macaron-purple: #BDB2FF;
+            --direct-color: #FFD6A5;
+            --reject-color: #FFADAD;
+            --line-color: rgba(160, 196, 255, 0.4);
+            --line-width: 4px;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .header { text-align: center; margin-bottom: 30px; }
+        h1 { margin: 0 0 15px 0; color: #2d3748; }
+
+        .toggle-btn {
+            background: #fff;
+            border: 2px solid var(--macaron-purple);
+            padding: 10px 24px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--macaron-purple);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(189, 178, 255, 0.3);
+        }
+
+        .toggle-btn:hover { background: var(--macaron-purple); color: white; }
+
+        .main-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 40px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .container {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            min-width: 950px;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .column {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 300px;
+            z-index: 2;
+        }
+
+        .col-title {
+            text-align: center; font-weight: bold; font-size: 18px; margin-bottom: 10px; color: #718096;
+        }
+
+        .card {
+            background: white; border-radius: 12px; padding: 12px 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02); border-left: 6px solid #ccc;
+            transition: transform 0.3s, box-shadow 0.3s, opacity 0.3s;
+            position: relative;
+        }
+
+        #col-sites { gap: 6px; }
+        #col-sites .card { padding: 8px 12px; }
+        #col-sites .card-title { font-size: 13px; margin-bottom: 0; font-weight: 500; }
+
+        .site-card { border-color: var(--macaron-blue); cursor: default; }
+        .group-card { border-color: var(--macaron-yellow); }
+        .node-card { border-color: var(--macaron-green); }
+        .direct-card { border-color: var(--direct-color); }
+        .reject-card { border-color: var(--reject-color); }
+
+        .card-title { font-weight: bold; margin-bottom: 8px; font-size: 15px; }
+
+        .slider-container {
+            display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 4px;
+        }
+        
+        .slider-item {
+            padding: 6px 12px; border-radius: 20px;
+            background: #f0f4f8; font-size: 13px; cursor: pointer; color: #4a5568;
+            transition: background 0.3s, color 0.3s, transform 0.1s; border: 1px solid transparent;
+            user-select: none; white-space: nowrap;
+        }
+        .slider-item:hover { background: #e2e8f0; transform: scale(1.05); }
+        .slider-item.active {
+            background: var(--macaron-purple); color: white; font-weight: bold;
+            box-shadow: 0 2px 5px rgba(189, 178, 255, 0.4);
+        }
+        .slider-item.disabled { opacity: 0.6; cursor: not-allowed; }
+
+        body:not(.global-mode) #group-GLOBAL { display: none; }
+        body.global-mode #group-GLOBAL { 
+            display: block; 
+            border-color: #ff9a9e; 
+            box-shadow: 0 4px 15px rgba(255, 154, 158, 0.3);
+        }
+        body.global-mode .group-card:not(#group-GLOBAL) { 
+            opacity: 0.3; 
+            pointer-events: none; 
+        }
+
+        svg.lines {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1; pointer-events: none;
+        }
+
+        path {
+            fill: none; stroke-linecap: round; pointer-events: stroke; 
+            transition: stroke 0.2s, stroke-width 0.2s; cursor: pointer;
+            animation: dash 1s ease-out forwards;
+        }
+
+        @keyframes dash {
+            from { stroke-dasharray: 0, 1000; }
+            to { stroke-dasharray: 1000, 0; }
+        }
+
+        .dimmed { opacity: 0.2 !important; }
+        .highlight-line { stroke: var(--macaron-pink) !important; stroke-width: 6px !important; z-index: 99; }
+        .hover-line { stroke: #a0aec0 !important; stroke-width: 8px !important; }
+
+        #tooltip {
+            position: fixed; background: rgba(45, 55, 72, 0.95); color: white;
+            padding: 10px 15px; border-radius: 8px; font-size: 14px; z-index: 1000;
+            pointer-events: none; opacity: 0; transition: opacity 0.2s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); white-space: nowrap; transform: translate(15px, 15px);
+        }
+
+        #infoBox {
+            position: fixed; bottom: 30px; right: 30px; background: white;
+            border-left: 6px solid var(--macaron-pink); padding: 20px; border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1); z-index: 1001;
+            width: 300px; display: none; flex-direction: column; gap: 10px;
+        }
+        .info-header { display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 16px;}
+        .close-btn { cursor: pointer; color: #a0aec0; font-size: 20px; line-height: 1; }
+        .close-btn:hover { color: #e53e3e; }
+        .route-step { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 4px; }
+        .route-arrow { color: #cbd5e0; font-size: 12px; margin-left: 5px;}
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>✨ 代理策略可视化 ✨</h1>
+        <button id="modeToggle" class="toggle-btn">当前：规则模式 (Rule)</button>
+    </div>
+
+    <div id="tooltip"></div>
+
+    <div id="infoBox">
+        <div class="info-header">
+            <span id="infoTitle">网站名称</span>
+            <span class="close-btn" onclick="closeInfoBox()">×</span>
+        </div>
+        <div id="infoRoute"></div>
+    </div>
+
+    <div class="main-wrapper">
+        <div class="container" id="mainContainer">
+            <svg class="lines" id="svgLines"></svg>
+            <div class="column" id="col-sites"><div class="col-title">🎯 网站</div></div>
+            <div class="column" id="col-groups"><div class="col-title">🎛️ 组</div></div>
+            <div class="column" id="col-nodes"><div class="col-title">🚀 落地节点</div></div>
+        </div>
+    </div>
+
+<script>
+    let isGlobalMode = false;
+
+    // 落地节点名称映射
+    const nodes = {
+        'DIRECT': { name: '🟢 不代理 (国内网直连)', type: 'direct', short: '直连不代理' },
+        'REJECT': { name: '🔴 拦截', type: 'reject', short: '拦截' },
+        'BLOCK_AI': { name: '🚫 无法使用 (区域限制)', type: 'reject', short: '区域受限' },
+        'JP': { name: '🇯🇵 日本节点池', type: 'node', short: '🇯🇵 JP' },
+        'HK': { name: '🇭🇰 香港节点池', type: 'node', short: '🇭🇰 HK' },
+        'TW': { name: '🇨🇳 台湾节点池', type: 'node', short: '🇨🇳 TW' },
+        'US': { name: '🇺🇸 美国节点池', type: 'node', short: '🇺🇸 US' },
+        'SG': { name: '🇸🇬 新加坡节点池', type: 'node', short: '🇸🇬 SG' },
+        'ISP_JP': { name: '🇯🇵 日本 ISP', type: 'node', short: '日本 ISP' },
+        'ISP_HK': { name: '🇭🇰 香港 ISP', type: 'node', short: '香港 ISP' },
+        'ISP_TW': { name: '🇨🇳 台湾 ISP', type: 'node', short: '台湾 ISP' },
+        'ISP_US': { name: '🇺🇸 美国 ISP', type: 'node', short: '美国 ISP' },
+        'ISP_KR': { name: '🇰🇷 韩国 ISP', type: 'node', short: '韩国 ISP' },
+        'ISP_UK': { name: '🇬🇧 英国 ISP', type: 'node', short: '英国 ISP' }
+    };
+
+    // 策略组修改：抽离出公共的 ISPRouting 路由组
+    const groups = {
+        'GLOBAL': { name: '🌍 GLOBAL (全局配置)', options: ['DIRECT', 'REJECT', 'JP', 'HK', 'TW', 'SG', 'US', 'ISPRouting'], selected: 'JP' },
+        'GeneralProxy': { name: '🌐 General Proxy', options: ['JP', 'HK', 'TW', 'SG', 'US', 'ISPRouting'], selected: 'JP' },
+        'ISPNodes': { name: '🏡 ISP Nodes', options: ['ISP_HK', 'ISP_JP', 'ISP_TW', 'ISP_US', 'ISP_KR', 'ISP_UK'], selected: 'ISP_HK' },
+        'ISPProtect': { name: '☘️ ISP 纯净保护', options: ['ISPNodes', 'ISPChain', 'GeneralProxy'], selected: 'ISPNodes' },
+        'ISPRouting': { name: '🏠 ISP', options: ['ISPNodes', 'ISPChain'], selected: 'ISPNodes' },
+        'ISPChain': { name: '⛓️ ISP Chain', options: ['odes'], selected: 'ISPNodes', hidden: true },
+        'Bilibili': { name: '⚡️ Bilibili', options: ['DIRECT', 'HK', 'TW'], selected: 'DIRECT' },
+        'Streaming': { name: '🎬 Streaming Media', options: ['TW', 'HK', 'JP', 'SG', 'US', 'GeneralProxy'], selected: 'TW' },
+        'Spotify': { name: '🎼 Spotify', options: ['DIRECT', 'GeneralProxy', 'JP', 'HK', 'TW', 'US'], selected: 'GeneralProxy' },
+        'Advertisement': { name: '⛔️ Advertisement', options: ['REJECT', 'DIRECT', 'GeneralProxy'], selected: 'REJECT' },
+        'Auto': { name: '💡 自动选择最快节点', options: ['HK', 'TW', 'GeneralProxy'], selected: 'HK' }
+    };
+
+    // 网站列表
+    const sites = [
+        { name: '广告域名（部分）', rule: 'Advertisement' },
+        { name: 'Adobe 监测域名', rule: 'REJECT' },
+        { name: '中国大陆网站', rule: 'DIRECT' },
+        { name: 'Google', rule: 'GeneralProxy' },
+        { name: 'YouTube', rule: 'GeneralProxy' },
+        { name: 'TikTok', rule: 'ISPProtect' },
+        { name: 'ChatGPT（OpenAI）', rule: 'ISPProtect' },
+        { name: 'Google AI Studio / Gemini', rule: 'ISPProtect' },
+        { name: 'Claude', rule: 'ISPProtect' },
+        { name: 'Microsoft Copilot', rule: 'ISPProtect' },
+        { name: 'Microsoft', rule: 'GeneralProxy' },
+        { name: 'hoyolab', rule: 'GeneralProxy' },
+        { name: '满血Bing国际版', rule: 'GeneralProxy' },
+        { name: 'wikipedia系列', rule: 'Auto' },
+        { name: 'DLSite', rule: 'Auto' },
+        { name: 'Bangumi番组计划', rule: 'Auto' },
+        { name: 'pixiv', rule: 'Auto' },
+        { name: 'Z-Library', rule: 'Auto' },
+        { name: 'GitHub', rule: 'Auto' },
+        { name: 'Notion', rule: 'Auto' },
+        { name: 'iwara', rule: 'Auto' },
+        { name: 'JMComic', rule: 'Auto' },
+        { name: 'bilibili', rule: 'Bilibili' },
+        { name: 'Netflix', rule: 'Streaming' },
+        { name: 'HBO-MAX', rule: 'Streaming' },
+        { name: 'Disney+', rule: 'Streaming' },
+        { name: 'Bahamut 动画疯', rule: 'TW' },
+        { name: 'Spotify', rule: 'Spotify' }
+    ];
+
+    const colSites = document.getElementById('col-sites');
+    const colGroups = document.getElementById('col-groups');
+    const colNodes = document.getElementById('col-nodes');
+    const svgLines = document.getElementById('svgLines');
+    const tooltip = document.getElementById('tooltip');
+    const infoBox = document.getElementById('infoBox');
+    const infoTitle = document.getElementById('infoTitle');
+    const infoRoute = document.getElementById('infoRoute');
+
+    function getShortName(key) {
+        if (key === 'GLOBAL') return '🌍 全局选择';
+        if (key === 'GeneralProxy') return '🌐 General Proxy';
+        if (key === 'ISPRouting') return '🏠 ISP';
+        if (key === 'ISPChain') return '⛓️ ISP Chain';
+        if (key === 'ISPNodes') return '🏡 ISP Nodes';
+        if (nodes[key]) return nodes[key].short;
+        return key;
+    }
+
+    function getFullName(key) {
+        if (groups[key]) return groups[key].name;
+        if (nodes[key]) return nodes[key].name;
+        return key;
+    }
+
+    function initUI() {
+        colSites.innerHTML = '<div class="col-title">🎯 网站</div>';
+        colGroups.innerHTML = '<div class="col-title">🎛️ 组</div>';
+        colNodes.innerHTML = '<div class="col-title">🚀 落地</div>';
+
+        sites.forEach((site, index) => {
+            const div = document.createElement('div');
+            div.className = 'card site-card';
+            div.id = `site-${index}`;
+            div.innerHTML = `<div class="card-title">${site.name}</div>`;
+            div.addEventListener('mouseenter', () => highlightPath(index));
+            div.addEventListener('mouseleave', resetHighlight);
+            colSites.appendChild(div);
+        });
+
+        Object.keys(groups).forEach(key => {
+            if(groups[key].hidden) return;
+            const group = groups[key];
+            const div = document.createElement('div');
+            div.className = 'card group-card';
+            div.id = `group-${key}`;
+            
+            let sliderHTML = `<div class="slider-container">`;
+            if (group.disabled) {
+                sliderHTML += `<div class="slider-item active disabled">${getShortName(group.selected)} (自动测速)</div>`;
+            } else {
+                group.options.forEach(opt => {
+                    const isActive = opt === group.selected ? 'active' : '';
+                    sliderHTML += `<div class="slider-item ${isActive}" onclick="updateGroup('${key}', '${opt}')">${getShortName(opt)}</div>`;
+                });
+            }
+            sliderHTML += `</div>`;
+
+            div.innerHTML = `<div class="card-title">${group.name}</div>${sliderHTML}`;
+            colGroups.appendChild(div);
+        });
+
+        Object.keys(nodes).forEach(key => {
+            const node = nodes[key];
+            const div = document.createElement('div');
+            div.className = `card node-card ${node.type}-card`;
+            div.id = `node-${key}`;
+            div.innerHTML = `<div class="card-title">${node.name}</div>`;
+            colNodes.appendChild(div);
+        });
+    }
+
+    window.updateGroup = function(groupId, value) {
+        groups[groupId].selected = value;
+        initUI(); 
+        setTimeout(drawAllLines, 50); 
+    };
+
+    document.getElementById('modeToggle').addEventListener('click', (e) => {
+        isGlobalMode = !isGlobalMode;
+        document.body.classList.toggle('global-mode', isGlobalMode);
+        e.target.innerText = isGlobalMode ? '当前：全局模式 (Global)' : '当前：规则模式 (Rule)';
+        e.target.style.background = isGlobalMode ? 'var(--macaron-yellow)' : '';
+        e.target.style.color = isGlobalMode ? '#2d3748' : '';
+        drawAllLines();
+    });
+
+    function resolvePath(target, siteName) {
+        let path = [];
+        let current = target;
+        let safeCounter = 0;
+        
+        while (current && safeCounter < 10) {
+            path.push(current);
+            if (nodes[current]) break;
+            if (groups[current]) {
+                let next = groups[current].selected;
+                if (next === 'ISPChain') {
+                    path.push('Auto'); 
+                    current = 'ISPNodes'; 
+                } else {
+                    current = next;
+                }
+            } else {
+                current = null;
+            }
+            safeCounter++;
+        }
+
+        if (['ChatGPT（OpenAI）', 'Google AI Studio / Gemini', 'Claude'].includes(siteName)) {
+            let finalNode = path[path.length - 1];
+            if (finalNode === 'HK' || finalNode === 'ISP_HK') {
+                path[path.length - 1] = 'BLOCK_AI'; 
+            }
+        }
+
+        return path;
+    }
+
+    let allPaths = [];
+
+    function drawAllLines() {
+        svgLines.innerHTML = '';
+        allPaths = [];
+
+        Object.keys(nodes).forEach(key => {
+            if (key.startsWith('ISP_')) {
+                const el = document.getElementById(`node-${key}`);
+                if (el) el.style.display = (groups['ISPNodes'].selected === key) ? 'block' : 'none';
+            }
+        });
+
+        sites.forEach((site, index) => {
+            const startEl = document.getElementById(`site-${index}`);
+            let initialTarget = isGlobalMode ? 'GLOBAL' : site.rule;
+            const route = resolvePath(initialTarget, site.name);
+            const textRouteArray = [site.name, ...route.map(r => getFullName(r))];
+            
+            let prevEl = startEl;
+            for (let i = 0; i < route.length; i++) {
+                let targetId = groups[route[i]] && !groups[route[i]].hidden ? `group-${route[i]}` : `node-${route[i]}`;
+                let targetEl = document.getElementById(targetId);
+                
+                if (targetEl && prevEl !== targetEl) {
+                    const finalNode = route[route.length-1];
+                    const color = (finalNode === 'REJECT' || finalNode === 'BLOCK_AI') ? 'var(--reject-color)' : 
+                                  finalNode === 'DIRECT' ? 'var(--direct-color)' : 'var(--line-color)';
+                    
+                    const pathData = drawBezier(prevEl, targetEl);
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    path.setAttribute('d', pathData);
+                    path.setAttribute('stroke', color);
+                    path.setAttribute('stroke-width', 'var(--line-width)');
+                    
+                    path.addEventListener('mouseenter', () => {
+                        path.classList.add('hover-line');
+                        tooltip.style.opacity = '1';
+                        tooltip.innerHTML = textRouteArray.join(' ➔ ');
+                    });
+                    path.addEventListener('mouseleave', () => {
+                        path.classList.remove('hover-line');
+                        tooltip.style.opacity = '0';
+                    });
+                    path.addEventListener('mousemove', (e) => {
+                        tooltip.style.left = (e.clientX + 15) + 'px';
+                        tooltip.style.top = (e.clientY + 15) + 'px';
+                    });
+                    path.addEventListener('click', () => showInfoBox(site.name, textRouteArray));
+
+                    svgLines.appendChild(path);
+                    allPaths.push({ dom: path, siteIndex: index });
+                    prevEl = targetEl;
+                }
+            }
+        });
+    }
+
+    function drawBezier(el1, el2) {
+        const r1 = el1.getBoundingClientRect();
+        const r2 = el2.getBoundingClientRect();
+        const svgR = svgLines.getBoundingClientRect();
+        const x1 = r1.right - svgR.left, y1 = r1.top + r1.height / 2 - svgR.top;
+        const x2 = r2.left - svgR.left, y2 = r2.top + r2.height / 2 - svgR.top;
+        const offset = Math.abs(x2 - x1) * 0.4;
+        return `M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}`;
+    }
+
+    function highlightPath(index) {
+        document.querySelectorAll('.card').forEach(c => c.classList.add('dimmed'));
+        allPaths.forEach(p => p.dom.style.opacity = '0.05');
+        
+        const relatedPaths = allPaths.filter(p => p.siteIndex === index);
+        relatedPaths.forEach(p => {
+            p.dom.classList.add('highlight-line');
+            p.dom.style.opacity = '1';
+        });
+
+        const site = sites[index];
+        document.getElementById(`site-${index}`).classList.remove('dimmed');
+        
+        let initialTarget = isGlobalMode ? 'GLOBAL' : site.rule;
+        
+        const route = resolvePath(initialTarget, site.name);
+        route.forEach(r => {
+            let elId = groups[r] && !groups[r].hidden ? `group-${r}` : `node-${r}`;
+            let el = document.getElementById(elId);
+            if(el) el.classList.remove('dimmed');
+        });
+    }
+
+    function resetHighlight() {
+        document.querySelectorAll('.card').forEach(c => c.classList.remove('dimmed'));
+        allPaths.forEach(p => {
+            p.dom.classList.remove('highlight-line');
+            p.dom.style.opacity = '1';
+        });
+    }
+
+    function showInfoBox(title, routeArray) {
+        infoTitle.innerText = title;
+        infoRoute.innerHTML = '';
+        
+        routeArray.forEach((step, idx) => {
+            const stepDiv = document.createElement('div');
+            stepDiv.className = 'route-step';
+            let icon = '🌐';
+            if (idx === 0) icon = '🎯'; 
+            else if (idx === routeArray.length - 1) icon = '🚀'; 
+            
+            stepDiv.innerHTML = `<span>${icon}</span> <span>${step}</span>`;
+            infoRoute.appendChild(stepDiv);
+            
+            if (idx < routeArray.length - 1) {
+                const arrow = document.createElement('div');
+                arrow.className = 'route-arrow';
+                arrow.innerText = '↓';
+                infoRoute.appendChild(arrow);
+            }
+        });
+        
+        infoBox.style.display = 'flex';
+    }
+
+    window.closeInfoBox = () => infoBox.style.display = 'none';
+
+    window.onload = () => {
+        initUI();
+        setTimeout(drawAllLines, 100);
+    };
+    window.onresize = drawAllLines;
+</script>
+
+</body>
+</html>
