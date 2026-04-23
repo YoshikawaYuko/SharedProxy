@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    </head>
+<body>
+    <div class="auth-container" id="login-box">
+        <div class="captcha-header">
+            <h3>先输入密码</h3>
+            <p>再选择所有包含</p>
+            <strong>黄前久美子</strong>
+            <p>的图片</p>
+        </div>
+        <div class="password-section">
+            <input type="password" id="password-input" class="password-input" placeholder="输入访问密码（随时更新）">
+        </div>
+        <div class="grid-container" id="image-grid"></div>
+        <div class="footer">
+            <span class="status-text" id="status-msg">验证失败，请重试</span>
+            <button class="verify-btn" onclick="verifyAndUnlock()">验证</button>
+        </div>
+        <div class="extra-link-wrapper">
+            <a href="./directions.html" class="extra-link-btn">代理策略可视化</a>
+        </div>
+    </div>
+
+    <div id="dashboard">
+        <div class="dash-header">
+            <span>链接管理</span>
+            <button onclick="location.reload()" style="border:none;background:none;cursor:pointer;">退出 Exit</button>
+        </div>
+        <div class="dash-body">
+            <div class="sidebar" id="sidebar"></div>
+            <div class="content">
+                <h3 id="sub-title">选择版本</h3>
+                <div class="code-box" id="sub-url">...</div>
+                <button class="copy-btn" onclick="copyText()">复制链接</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // ⚠️ 在这里填入你的 Worker API 地址
+    const WORKER_URL = "https://你的worker域名.workers.dev"; 
+
+    // 你的图片池数组 IMAGE_POOL 和 IMG_BASE_PATH 保持不变，粘贴回这里
+    
+    let currentSelection = new Set(); 
+    let currentRenderedImages = [];   
+    
+    window.onload = function() { initCaptcha(); };
+
+    function isCorrectImage(filename) {
+        const namePart = filename.substring(0, filename.lastIndexOf('.'));
+        if (namePart.length < 2) return false;
+        return namePart.charAt(namePart.length - 2) === '0';
+    }
+
+    function initCaptcha() {
+        // ... (你原本洗牌和渲染图片的逻辑原封不动粘贴回这里) ...
+    }
+    
+    function shuffleArray(array) { /* 原封不动 */ }
+    function toggleSelect(element, index) { /* 原封不动 */ }
+
+    async function verifyAndUnlock() {
+        const passwordField = document.getElementById('password-input');
+        const password = passwordField.value;
+        const msg = document.getElementById('status-msg');
+        
+        if (!password) { alert("❌ 请输入密码！"); return; }
+
+        let isCaptchaValid = true;
+        currentSelection.forEach(index => { if (!isCorrectImage(currentRenderedImages[index])) isCaptchaValid = false; });
+        currentRenderedImages.forEach((img, index) => { if (isCorrectImage(img) && !currentSelection.has(index)) isCaptchaValid = false; });
+
+        if (!isCaptchaValid) {
+            alert("❌ 图片验证失败！\n请仔细辨认黄前部长。");
+            msg.textContent = "验证失败";
+            msg.style.visibility = 'visible';
+            setTimeout(initCaptcha, 1000); 
+            return;
+        }
+
+        try {
+            const res = await fetch(WORKER_URL + '/api/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: password })
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                alert("✅ 验证成功！ \n【必读】 \n请复制生成的一次性链接导入代理软件，该链接下载一次后即刻销毁。");
+                const mockData = [{ title: "阅后即焚专属节点", url: data.link }];
+                showDashboard(mockData);
+            } else {
+                alert("❌ " + data.error);
+                msg.textContent = "口令错误";
+                msg.style.visibility = 'visible';
+                passwordField.value = '';
+                initCaptcha();
+            }
+        } catch (e) {
+            alert("❌ 网络请求失败！请检查 Worker 接口是否被墙。");
+        }
+    }
+
+    function showDashboard(data) { /* 原封不动 */ }
+    function loadContent(item, elem) { /* 原封不动 */ }
+    function copyText() { /* 原封不动 */ }
+</script>
+</body>
+</html>
