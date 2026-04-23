@@ -35,9 +35,9 @@
 
         .footer { padding: 15px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; }
         .status-text { font-size: 12px; color: #d32f2f; visibility: hidden; }
-        .verify-btn { background: #1A73E8; color: white; border: none; padding: 10px 24px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .verify-btn:hover { background: #1557b0; }
-        .verify-btn:disabled { background: #ccc; cursor: not-allowed; }
+        .verify-btn { background: #1A73E8; color: white; border: none; padding: 13px 36px; border-radius: 6px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 6px rgba(26,115,232,0.35); }
+        .verify-btn:hover { background: #1557b0; box-shadow: 0 3px 10px rgba(26,115,232,0.45); }
+        .verify-btn:disabled { background: #ccc; cursor: not-allowed; box-shadow: none; }
 
         #dashboard { display: none; width: 90%; max-width: 600px; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); overflow: hidden; }
         .dash-header { padding: 20px; border-bottom: 1px solid #eee; font-weight: bold; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; }
@@ -49,7 +49,7 @@
         .warning-box { background: #fff8e1; border: 1px solid #ffe082; border-radius: 4px; padding: 12px 15px; font-size: 13px; color: #795548; margin-top: 15px; line-height: 1.6; }
 
         .extra-link-wrapper {
-            padding: 15px;
+            padding: 12px 15px 15px;
             border-top: 1px solid #eee;
             background: #fafafa;
         }
@@ -57,19 +57,19 @@
             display: block;
             width: 100%;
             background: white;
-            color: #1A73E8;
-            border: 2px solid #1A73E8;
-            padding: 12px 0;
+            color: #999;
+            border: 1.5px solid #ccc;
+            padding: 9px 0;
             border-radius: 6px;
-            font-size: 15px;
-            font-weight: bold;
+            font-size: 13px;
+            font-weight: normal;
             text-align: center;
             text-decoration: none;
-            transition: 0.3s;
+            transition: 0.2s;
             box-sizing: border-box;
             cursor: pointer;
         }
-        .extra-link-btn:hover { background: #1A73E8; color: white; }
+        .extra-link-btn:hover { background: #f0f0f0; color: #555; border-color: #aaa; }
     </style>
 </head>
 <body>
@@ -104,14 +104,16 @@
             <button onclick="location.reload()" style="border:none;background:none;cursor:pointer;color:#666;">退出 Exit</button>
         </div>
         <div class="dash-body">
-            <div class="dash-label">你的一次性订阅链接：</div>
+            <div class="dash-label">一次性订阅链接：</div>
             <div class="code-box" id="sub-url">...</div>
             <button class="copy-btn" onclick="copyText()">复制链接</button>
             <div class="warning-box">
                 ⚠️ <strong>注意：</strong><br>
-                1. 此链接<strong>只能使用一次</strong>，使用后立即失效；<br>
-                2. 只允许在代理软件中粘贴，不允许粘贴到微信/QQ/备忘录等；<br>
-                3. 链接7天内有效，过期或使用后请重新验证获取。
+                1. 此链接采取阅后即焚机制，<strong>只能使用一次</strong>，使用后立即失效；<br>
+                2. 只允许在代理软件中粘贴，不允许粘贴到微信/QQ/学习通等；<br>
+                3. 链接<strong>5分钟内有效</strong>，复制后注意及时在代理软件中拉取；<br>
+                4. 不再提供往期失效链接，只有最新链接；<br>
+                5. FlyClash-Android Download（备用）：https://github.com/GtxFury/FlyClash-Android/releases/download/v0.2.1.4-Alpha/flyclash-0.2.1.4-pbMeta-universal-release.apk
             </div>
         </div>
         <div class="extra-link-wrapper" style="text-align:center;">
@@ -120,8 +122,8 @@
     </div>
 
 <script>
-    // ↓↓↓ 部署后将这里替换为你的 Cloudflare Worker 地址 ↓↓↓
-    const WORKER_URL = "https://proxylink.ardeliaaggas08.workers.dev";
+    // ↓↓↓ Cloudflare Worker 地址 ↓↓↓
+    const WORKER_URL = "https://cocoachino.dpdns.org";
     // ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
 
     const IMAGE_POOL = [
@@ -240,7 +242,7 @@
             showDashboard(data.url);
 
         } catch (e) {
-            alert("❌ 网络错误，请检查网络连接后重试。");
+            alert("❌ 网络错误，请检查网络连接或调整代理后重试。");
             msg.textContent = "连接失败";
             msg.style.visibility = 'visible';
         } finally {
