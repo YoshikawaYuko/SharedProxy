@@ -58,9 +58,9 @@ export default {
         return Response.json({ error: "Wrong password" }, { status: 403, headers: cors });
       }
 
-      // Generate single-use token (valid 7 days)
+      // Generate single-use token (valid 5 minutes)
       const token = crypto.randomUUID();
-      await env.TOKENS.put(token, "unused", { expirationTtl: 604800 });
+      await env.TOKENS.put(token, "unused", { expirationTtl: 300 });
 
       const subUrl = `${url.origin}/sub/${token}`;
       return Response.json({ url: subUrl }, { headers: cors });
@@ -81,7 +81,7 @@ export default {
       }
 
       // Mark used before fetching (fail-safe: even if gist fetch fails, token is spent)
-      await env.TOKENS.put(token, "used", { expirationTtl: 604800 });
+      await env.TOKENS.put(token, "used", { expirationTtl: 300 });
 
       let yaml;
       try {
