@@ -2,50 +2,127 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>安全网关 - 云端控制台</title>
+    <title>Admin Tools (Local Only)</title>
+    <script src="./crypto-js.min.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f4f6f8; }
-        .box { background: white; padding: 25px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        input, textarea { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;}
-        button { width: 100%; padding: 12px; cursor: pointer; background: #34a853; color: white; border: none; border-radius: 4px; font-weight: bold;}
-        label { font-weight: bold; display: block; margin-bottom: 5px; }
+        body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; background: #f4f6f8; }
+        .box { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        textarea { width: 100%; font-family: monospace; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        input[type=text], input[type=password] { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 14px; }
+        button { padding: 10px 20px; cursor: pointer; background: #4a90e2; color: white; border: none; border-radius: 4px; font-size: 15px; margin-right: 10px; }
+        button:hover { background: #357abd; }
+        .result-box { background: #f1f3f4; padding: 12px; border-radius: 4px; font-family: monospace; word-break: break-all; border: 1px solid #ddd; margin-top: 10px; font-size: 13px; cursor: pointer; }
+        .success { color: green; font-weight: bold; margin-top: 8px; }
+        .error { color: red; font-weight: bold; margin-top: 8px; }
+        h2 { margin-top: 0; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px; }
+        .step { color: #888; font-size: 13px; margin-bottom: 6px; }
     </style>
 </head>
 <body>
-    <h1 style="text-align: center; color: #1A73E8;">🌐 安全控制台</h1>
-    <div class="box">
-        <label>1. Worker API 地址 (末尾不带斜杠)</label>
-        <input type="text" id="worker_url" placeholder="https://sub-engine.xxx.workers.dev">
-        <label>2. 管理员密钥</label>
-        <input type="password" id="admin_secret" placeholder="输入你在 Worker 代码里写的密钥">
-    </div>
-    <div class="box">
-        <label>👉 当前问题提示词</label>
-        <input type="text" id="question" placeholder="例如：请输入口令卡 C行4列">
-        <label>🔑 对应数字答案</label>
-        <input type="text" id="answer" placeholder="例如：8848">
-        <label>🔗 最新的 GitHub Gist Raw URL</label>
-        <textarea id="gist_url" rows="3" placeholder="https://gist.githubusercontent.com/..."></textarea>
-        <button onclick="syncToCloud()">🚀 立即同步至云端防御系统</button>
-    </div>
-    <script>
-        async function syncToCloud() {
-            const workerUrl = document.getElementById('worker_url').value.replace(/\/$/, "");
-            const secret = document.getElementById('admin_secret').value;
-            const question = document.getElementById('question').value;
-            const answer = document.getElementById('answer').value;
-            const gistUrl = document.getElementById('gist_url').value;
+    <h1>🛠️ Admin Tools <small style="font-size:14px;color:#888;">(仅限本地使用，勿上传)</small></h1>
 
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- 1. Password Hash Generator                     -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="box">
+        <h2>1. 生成密码哈希（更新 config.json 时用）</h2>
+        <p class="step">输入新密码 → 点击生成 → 复制哈希值 → 粘贴到 GitHub 仓库的 config.json 中 passwordHash 字段</p>
+        <input type="password" id="new-password" placeholder="输入新密码">
+        <button onclick="generateHash()">生成 SHA-256 哈希</button>
+        <div class="step" style="margin-top:12px;">生成的哈希值（点击复制）：</div>
+        <div class="result-box" id="hash-result" onclick="copyHash()">(结果显示在这里)</div>
+        <div id="hash-status"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- 2. CryptoJS Encrypt (legacy, kept for reference) -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="box">
+        <h2>2. AES 加密工具（旧系统备用）</h2>
+        <p class="step">Check encryption library: <span id="lib-status">...</span></p>
+        <input type="text" id="password" placeholder="Set access password">
+        <p>Enter subscription data (JSON format):</p>
+        <textarea id="data" rows="6">
+[
+  { "title": "Latest", "url": "https://example.com/sub.yaml" }
+]</textarea>
+        <br><br>
+        <button onclick="encrypt()">Generate Encrypted String</button>
+    </div>
+
+    <div class="box">
+        <h2>Result</h2>
+        <textarea id="result" rows="4" readonly onclick="this.select()"></textarea>
+        <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px;">
+            <h4>Self-Check</h4>
+            <button onclick="testDecrypt()" style="background: #666;">Test Decryption</button>
+            <div id="test-result"></div>
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() {
+            const status = document.getElementById('lib-status');
+            if (typeof CryptoJS === 'undefined') {
+                status.innerHTML = '<span style="color:red">❌ crypto-js.min.js not found</span>';
+            } else {
+                status.innerHTML = '<span style="color:green">✅ Loaded</span>';
+            }
+        };
+
+        async function generateHash() {
+            const pwd = document.getElementById('new-password').value;
+            const statusEl = document.getElementById('hash-status');
+            if (!pwd) {
+                statusEl.innerHTML = '<span class="error">❌ 请输入密码</span>';
+                return;
+            }
+            const encoded = new TextEncoder().encode(pwd);
+            const hashBuf = await crypto.subtle.digest('SHA-256', encoded);
+            const hashHex = Array.from(new Uint8Array(hashBuf))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+            document.getElementById('hash-result').textContent = hashHex;
+            statusEl.innerHTML = '<span class="success">✅ 生成成功，点击上方结果框可复制</span>';
+        }
+
+        function copyHash() {
+            const text = document.getElementById('hash-result').textContent;
+            if (text === '(结果显示在这里)') return;
+            navigator.clipboard.writeText(text).then(() => {
+                document.getElementById('hash-status').innerHTML = '<span class="success">✅ 已复制到剪贴板</span>';
+            });
+        }
+
+        function encrypt() {
+            const pwd = document.getElementById('password').value;
+            const data = document.getElementById('data').value;
+            if (!pwd) return alert('❌ Lack of password');
             try {
-                const res = await fetch(workerUrl + '/api/admin', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': secret },
-                    body: JSON.stringify({ question, answer, gist_url: gistUrl })
-                });
-                if (res.status === 401) return alert("❌ 密钥错误！");
-                const data = await res.json();
-                if (data.success) alert("✅ 同步成功！云端已更新。");
-            } catch (e) { alert("❌ 请求失败：" + e.message); }
+                const encrypted = CryptoJS.AES.encrypt(data, pwd).toString();
+                document.getElementById('result').value = encrypted;
+                document.getElementById('test-result').innerHTML = '<span class="success">✅ Success</span>';
+            } catch(e) {
+                alert('Failed: ' + e.message);
+            }
+        }
+
+        function testDecrypt() {
+            const pwd = document.getElementById('password').value;
+            const encrypted = document.getElementById('result').value;
+            const output = document.getElementById('test-result');
+            if (!encrypted) return alert('Generate code first');
+            try {
+                const bytes = CryptoJS.AES.decrypt(encrypted, pwd);
+                const originalText = bytes.toString(CryptoJS.enc.Utf8);
+                if (originalText.startsWith('[')) {
+                    output.innerHTML = '<span class="success">✅ Success! Valid JSON.</span>';
+                } else {
+                    output.innerHTML = '<span class="error">❌ Incorrect JSON format.</span>';
+                }
+            } catch (e) {
+                output.innerHTML = '<span class="error">❌ Failed: ' + e.message + '</span>';
+            }
         }
     </script>
 </body>

@@ -1,20 +1,205 @@
-// ⚠️ 填入你刚才在 Cloudflare 部署的无密码版 Worker 地址
-    const WORKER_URL = "https://clash-sub.ardeliaaggas08.workers.dev"; 
-    
-    // 🔴 每次用 admin.html 生成的新密文，替换到这里！
-    const ENCRYPTED_DATA = "U2FsdGVkX1...这里放你用本地 admin 生成的超长密文...";
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>访问验证</title>
+    <script src="./crypto-js.min.js"></script>
+    <style>
+        :root { --primary: #4a90e2; --bg: #f0f2f5; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+
+        .auth-container { background: white; padding: 0; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 360px; overflow: hidden; }
+
+        .captcha-header { background: #1A73E8; color: white; padding: 20px; position: relative; }
+        .captcha-header h3 { margin: 0; font-size: 1.1rem; font-weight: 500; }
+        .captcha-header p { margin: 5px 0 0; font-size: 0.9rem; opacity: 0.9; }
+        .captcha-header strong { font-weight: 800; font-size: 1.4rem; display: block; margin-top: 5px; }
+
+        .password-section { padding: 15px 20px 5px; border-bottom: 1px solid #eee; }
+        .password-input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; outline: none; transition: 0.3s; }
+        .password-input:focus { border-color: #1A73E8; }
+
+        .grid-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 10px; }
+
+        .grid-item { position: relative; cursor: pointer; aspect-ratio: 1; overflow: hidden; transition: transform 0.1s; }
+        .grid-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+        .grid-item.selected { box-shadow: inset 0 0 0 3px #1A73E8; }
+        .grid-item.selected::after {
+            content: '✓'; position: absolute; top: 5px; left: 5px; background: #1A73E8; color: white;
+            border-radius: 50%; width: 20px; height: 20px; font-size: 12px; display: flex;
+            align-items: center; justify-content: center; font-weight: bold;
+        }
+        .grid-item:active { transform: scale(0.95); }
+
+        .footer { padding: 15px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; }
+        .status-text { font-size: 12px; color: #d32f2f; visibility: hidden; }
+        .verify-btn { background: #1A73E8; color: white; border: none; padding: 10px 24px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .verify-btn:hover { background: #1557b0; }
+        .verify-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        #dashboard { display: none; width: 90%; max-width: 600px; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); overflow: hidden; }
+        .dash-header { padding: 20px; border-bottom: 1px solid #eee; font-weight: bold; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; }
+        .dash-body { padding: 30px; }
+        .dash-label { font-size: 14px; color: #666; margin-bottom: 8px; }
+        .code-box { background: #f1f3f4; padding: 15px; border-radius: 4px; font-family: monospace; word-break: break-all; border: 1px solid #ddd; margin: 0 0 15px 0; color: #333; font-size: 13px; }
+        .copy-btn { padding: 10px 20px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        .copy-btn:hover { background: #2d9247; }
+        .warning-box { background: #fff8e1; border: 1px solid #ffe082; border-radius: 4px; padding: 12px 15px; font-size: 13px; color: #795548; margin-top: 15px; line-height: 1.6; }
+
+        .extra-link-wrapper {
+            padding: 15px;
+            border-top: 1px solid #eee;
+            background: #fafafa;
+        }
+        .extra-link-btn {
+            display: block;
+            width: 100%;
+            background: white;
+            color: #1A73E8;
+            border: 2px solid #1A73E8;
+            padding: 12px 0;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: bold;
+            text-align: center;
+            text-decoration: none;
+            transition: 0.3s;
+            box-sizing: border-box;
+            cursor: pointer;
+        }
+        .extra-link-btn:hover { background: #1A73E8; color: white; }
+    </style>
+</head>
+<body>
+
+    <div class="auth-container" id="login-box">
+        <div class="captcha-header">
+            <h3>先输入密码</h3>
+            <p>再选择所有包含</p>
+            <strong>黄前久美子</strong>
+            <p>的图片</p>
+        </div>
+
+        <div class="password-section">
+            <input type="password" id="password-input" class="password-input" placeholder="输入访问密码（随时更新）">
+        </div>
+
+        <div class="grid-container" id="image-grid"></div>
+
+        <div class="footer">
+            <span class="status-text" id="status-msg">验证失败，请重试</span>
+            <button class="verify-btn" id="verify-btn" onclick="verifyAndUnlock()">验证</button>
+        </div>
+
+        <div class="extra-link-wrapper">
+            <a href="./directions.html" class="extra-link-btn">代理策略可视化</a>
+        </div>
+    </div>
+
+    <div id="dashboard">
+        <div class="dash-header">
+            <span>订阅链接</span>
+            <button onclick="location.reload()" style="border:none;background:none;cursor:pointer;color:#666;">退出 Exit</button>
+        </div>
+        <div class="dash-body">
+            <div class="dash-label">你的一次性订阅链接：</div>
+            <div class="code-box" id="sub-url">...</div>
+            <button class="copy-btn" onclick="copyText()">复制链接</button>
+            <div class="warning-box">
+                ⚠️ <strong>注意：</strong><br>
+                1. 此链接<strong>只能使用一次</strong>，使用后立即失效；<br>
+                2. 只允许在代理软件中粘贴，不允许粘贴到微信/QQ/备忘录等；<br>
+                3. 链接7天内有效，过期或使用后请重新验证获取。
+            </div>
+        </div>
+        <div class="extra-link-wrapper" style="text-align:center;">
+            <a href="./directions.html" class="extra-link-btn" style="display:inline-block;width:50%;min-width:240px;">代理策略可视化</a>
+        </div>
+    </div>
+
+<script>
+    // ↓↓↓ 部署后将这里替换为你的 Cloudflare Worker 地址 ↓↓↓
+    const WORKER_URL = "https://your-worker-name.your-subdomain.workers.dev";
+    // ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
+
+    const IMAGE_POOL = [
+        "049425121.jpg", "062375221.jpg", "068339212.jpg", "093897120.jpg", "127014122.jpg", "175112031.jpg", "198555202.jpg", "224078300.jpg", "226085023.jpg", "265629220.jpg", "300652323.jpg", "319391313.jpg", "326017123.jpg", "336839201.jpg", "365682133.jpg", "366512330.jpg", "381587302.jpg", "388679303.jpg", "444319112.jpg", "516266303.jpg", "516266323.jpg", "537651302.jpg", "551432203.jpg", "552460202.jpg", "566980030.jpg", "572528312.jpg", "580810303.jpg", "580810323.jpg", "584474022.jpg", "584474202.jpg", "590683220.jpg", "682464322.jpg", "735089012.jpg", "777075011.jpg", "783950313.jpg", "977279232.jpg"
+    ];
+
+    const IMG_BASE_PATH = "./images/";
+
+    let currentSelection = new Set();
+    let currentRenderedImages = [];
+
+    window.onload = function() { initCaptcha(); };
+
+    function isCorrectImage(filename) {
+        const namePart = filename.substring(0, filename.lastIndexOf('.'));
+        if (namePart.length < 2) return false;
+        return namePart.charAt(namePart.length - 2) === '0';
+    }
+
+    function initCaptcha() {
+        const grid = document.getElementById('image-grid');
+        grid.innerHTML = '';
+        currentSelection.clear();
+
+        const correctPool = IMAGE_POOL.filter(img => isCorrectImage(img));
+        const wrongPool = IMAGE_POOL.filter(img => !isCorrectImage(img));
+
+        const correctCount = Math.floor(Math.random() * 3) + 4;
+        const wrongCount = 9 - correctCount;
+
+        const selectedCorrect = shuffleArray(correctPool).slice(0, correctCount);
+        const selectedWrong = shuffleArray(wrongPool).slice(0, wrongCount);
+
+        currentRenderedImages = shuffleArray([...selectedCorrect, ...selectedWrong]);
+
+        currentRenderedImages.forEach((imgName, index) => {
+            const div = document.createElement('div');
+            div.className = 'grid-item';
+            div.onclick = () => toggleSelect(div, index);
+            const img = document.createElement('img');
+            img.src = IMG_BASE_PATH + imgName;
+            div.appendChild(img);
+            grid.appendChild(div);
+        });
+
+        document.getElementById('status-msg').style.visibility = 'hidden';
+    }
+
+    function shuffleArray(array) {
+        let res = [...array];
+        for (let i = res.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [res[i], res[j]] = [res[j], res[i]];
+        }
+        return res;
+    }
+
+    function toggleSelect(element, index) {
+        if (currentSelection.has(index)) {
+            currentSelection.delete(index);
+            element.classList.remove('selected');
+        } else {
+            currentSelection.add(index);
+            element.classList.add('selected');
+        }
+    }
 
     async function verifyAndUnlock() {
-        const passwordField = document.getElementById('password-input');
-        const password = passwordField.value;
+        const password = document.getElementById('password-input').value;
         const msg = document.getElementById('status-msg');
-        
+        const btn = document.getElementById('verify-btn');
+
         if (!password) {
-            alert("❌ 请输入口令！");
+            alert("❌ 请输入密码！");
             return;
         }
 
-        // 1. 本地图片验证逻辑
+        // Image captcha validation (unchanged logic)
         let isCaptchaValid = true;
         currentSelection.forEach(index => {
             if (!isCorrectImage(currentRenderedImages[index])) isCaptchaValid = false;
@@ -24,61 +209,67 @@
         });
 
         if (!isCaptchaValid) {
-            alert("❌ 吹奏部入部测试失败！\n请仔细辨认黄前部长。");
-            msg.textContent = "图片验证失败";
+            alert("❌ 图片验证失败！\n请检查是否选错了，或者漏选了。");
+            msg.textContent = "验证失败";
             msg.style.visibility = 'visible';
-            setTimeout(initCaptcha, 1000); 
+            setTimeout(initCaptcha, 1000);
             return;
         }
 
-        // 2. 核心：完全在本地浏览器进行 AES 解密！
-        let data;
-        try {
-            const bytes = CryptoJS.AES.decrypt(ENCRYPTED_DATA.trim(), password);
-            const originalText = bytes.toString(CryptoJS.enc.Utf8);
-            
-            if (!originalText) throw new Error("解密结果为空");
-            
-            data = JSON.parse(originalText); 
-            console.log("本地解密成功！");
-        } catch (e) {
-            // 只要密码错一个字，或者图片验证码乱选导致密码不对，都会在这里被拦截
-            alert("❌ 口令错误，解密失败！");
-            msg.textContent = "口令错误";
-            msg.style.visibility = 'visible';
-            passwordField.value = ''; 
-            initCaptcha(); 
-            return;
-        }
+        btn.disabled = true;
+        btn.textContent = "验证中…";
 
-        // 3. 解密成功后，把解密出来的真实 URL 发给 Cloudflare 制造替身
         try {
-            // 提取出你配置里的真实 URL
-            const realGistUrl = data[0].url; 
-
-            const res = await fetch(WORKER_URL + '/api/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target_url: realGistUrl })
+            const resp = await fetch(`${WORKER_URL}/verify`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ password }),
             });
 
-            const apiData = await res.json();
+            const data = await resp.json();
 
-            if (apiData.link) {
-                alert("✅ 验证通过且替身链接生成成功！\n请复制该一次性链接导入 Clash。");
-                
-                // 将真实的 URL 替换为 Cloudflare 给的一次性替身链接，展示给用户
-                const mockData = [{
-                    title: "阅后即焚专属节点 (单次有效)", 
-                    url: apiData.link
-                }];
-                showDashboard(mockData);
+            if (!resp.ok) {
+                alert("❌ 密码错误！请重新输入。");
+                msg.textContent = "密码错误";
+                msg.style.visibility = 'visible';
+                initCaptcha();
+                return;
             }
-            
+
+            alert("✅ 验证成功！\n请阅读页面上的注意事项后再复制链接。");
+            showDashboard(data.url);
+
         } catch (e) {
-            console.error("请求失败:", e); 
-            alert("❌ 生成阅后即焚链接失败！网络请求被拦截，请检查代理设置。");
-            msg.textContent = "网络异常";
+            alert("❌ 网络错误，请检查网络连接后重试。");
+            msg.textContent = "连接失败";
             msg.style.visibility = 'visible';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "验证";
         }
     }
+
+    function showDashboard(url) {
+        document.getElementById('login-box').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        document.getElementById('sub-url').textContent = url;
+    }
+
+    function copyText() {
+        const text = document.getElementById('sub-url').textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            alert("已复制到剪贴板");
+        }).catch(() => {
+            // Fallback for mobile
+            const el = document.getElementById('sub-url');
+            const range = document.createRange();
+            range.selectNode(el);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            document.execCommand('copy');
+            alert("已复制到剪贴板");
+        });
+    }
+</script>
+</body>
+</html>
