@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>安全网关 - 云端控制台</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f4f6f8; }
+        .box { background: white; padding: 25px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        input, textarea { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;}
+        button { width: 100%; padding: 12px; cursor: pointer; background: #34a853; color: white; border: none; border-radius: 4px; font-weight: bold;}
+        label { font-weight: bold; display: block; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; color: #1A73E8;">🌐 安全控制台</h1>
+    <div class="box">
+        <label>1. Worker API 地址 (末尾不带斜杠)</label>
+        <input type="text" id="worker_url" placeholder="https://sub-engine.xxx.workers.dev">
+        <label>2. 管理员密钥</label>
+        <input type="password" id="admin_secret" placeholder="输入你在 Worker 代码里写的密钥">
+    </div>
+    <div class="box">
+        <label>👉 当前问题提示词</label>
+        <input type="text" id="question" placeholder="例如：请输入口令卡 C行4列">
+        <label>🔑 对应数字答案</label>
+        <input type="text" id="answer" placeholder="例如：8848">
+        <label>🔗 最新的 GitHub Gist Raw URL</label>
+        <textarea id="gist_url" rows="3" placeholder="https://gist.githubusercontent.com/..."></textarea>
+        <button onclick="syncToCloud()">🚀 立即同步至云端防御系统</button>
+    </div>
+    <script>
+        async function syncToCloud() {
+            const workerUrl = document.getElementById('worker_url').value.replace(/\/$/, "");
+            const secret = document.getElementById('admin_secret').value;
+            const question = document.getElementById('question').value;
+            const answer = document.getElementById('answer').value;
+            const gistUrl = document.getElementById('gist_url').value;
+
+            try {
+                const res = await fetch(workerUrl + '/api/admin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': secret },
+                    body: JSON.stringify({ question, answer, gist_url: gistUrl })
+                });
+                if (res.status === 401) return alert("❌ 密钥错误！");
+                const data = await res.json();
+                if (data.success) alert("✅ 同步成功！云端已更新。");
+            } catch (e) { alert("❌ 请求失败：" + e.message); }
+        }
+    </script>
+</body>
+</html>
